@@ -1,9 +1,10 @@
 """Excel'den öğrenci / veli listesi içe aktarma."""
+import io
 import re
 import secrets
 from typing import BinaryIO
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -101,3 +102,16 @@ def ice_aktar(db: Session, dosya: BinaryIO) -> dict:
         db.flush()
 
     return rapor
+
+
+def sablon_xlsx() -> bytes:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Liste"
+    ws.append(["okul_no", "ogrenci_ad_soyad", "sinif", "oda", "veli_ad_soyad", "veli_telefon", "yakinlik"])
+    ws.append(["1001", "Örnek Öğrenci", "9-A", "12", "Örnek Veli", "05321234567", "Anne"])
+    for harf, genislik in zip("ABCDEFG", (10, 24, 8, 8, 24, 16, 10)):
+        ws.column_dimensions[harf].width = genislik
+    cikti = io.BytesIO()
+    wb.save(cikti)
+    return cikti.getvalue()

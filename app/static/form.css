@@ -1,0 +1,43 @@
+/* A4 izin formu: ekranda önizleme, yazdırırken sadece form */
+.form-sayfa { max-width: 210mm; margin: 0 auto; padding: 14mm 14mm 10mm; background: #fff; color: #000;
+  font: 11pt/1.4 "Segoe UI", Arial, sans-serif; }
+.form-baslik { text-align: center; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; position: relative; }
+.form-baslik .okul { font-weight: 600; font-size: 12pt; }
+.form-baslik h1 { margin: 2px 0; font-size: 15pt; letter-spacing: .5px; }
+.form-baslik .no { position: absolute; right: 0; top: 0; font-size: 9pt; }
+.form-sayfa h2 { font-size: 11pt; margin: 12px 0 4px; padding: 2px 6px; background: #e8e8e8; border: 1px solid #999; }
+.izgara { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 14px; }
+.alan { display: flex; gap: 6px; border-bottom: 1px dotted #555; min-height: 24px; align-items: flex-end; padding-bottom: 1px; }
+.alan.genis { grid-column: 1 / -1; }
+.etiket { font-weight: 600; white-space: nowrap; }
+.deger { flex: 1; }
+.turler { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: center; margin: 4px 0 6px; }
+.kutu { white-space: nowrap; }
+.metin { font-size: 10pt; margin: 8px 0 4px; text-align: justify; }
+.imzalar { display: flex; justify-content: flex-end; gap: 30px; margin-top: 6px; }
+.imzalar.iki { justify-content: space-between; }
+.imza { width: 62mm; text-align: center; }
+.imza-baslik { font-weight: 600; font-size: 10pt; }
+.imza-alan { height: 16mm; border-bottom: 1px solid #000; }
+.imza-alt { font-size: 9pt; }
+.form-alt { margin-top: 12px; font-size: 8.5pt; border-top: 1px solid #999; padding-top: 4px; text-align: center; }
+.form-onizleme { background: #ddd; margin: 0; }
+.form-onizleme .form-sayfa { box-shadow: 0 2px 8px #0005; margin-bottom: 20px; }
+.arac-cubugu { text-align: center; padding: 10px; }
+.arac-cubugu button { font-size: 16px; padding: 10px 18px; }
+@page { size: A4; margin: 0; }
+@media print {
+  .arac-cubugu, .uygulama-kabugu { display: none !important; }
+  .form-onizleme { background: #fff; }
+  .form-onizleme .form-sayfa { box-shadow: none; margin: 0; }
+}
+
+/* Telefon ekranında önizleme: tek sütun, taşma yok (yazdırma düzeni etkilenmez) */
+@media screen and (max-width: 700px) {
+  .form-sayfa { padding: 12px 12px 8px; font-size: 10.5pt; }
+  .izgara { grid-template-columns: 1fr; }
+  .alan { flex-wrap: wrap; }
+  .form-baslik .no { position: static; text-align: right; }
+  .imzalar, .imzalar.iki { flex-direction: column; align-items: stretch; }
+  .imza { width: auto; }
+}

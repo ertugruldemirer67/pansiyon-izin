@@ -2,10 +2,10 @@
 import json
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import extract, func, select
 from sqlalchemy.orm import Session
 
-from . import config
+from . import ayarlar
 from .models import (
     TURLER,
     Bildirim,
@@ -31,6 +31,7 @@ KULLANILMADI = "kullanilmadi"
 
 AKTIF = (VELI_BEKLIYOR, YONETICI_BEKLIYOR, ONAYLANDI, DISARIDA, GECIKTI)
 DISARIDAKI = (DISARIDA, GECIKTI)
+CIFTE_OKUTMA_SN = 60  # aynı öğrenci bu süre içinde tekrar okutulamaz
 
 
 class IsKuraliHatasi(Exception):
@@ -110,6 +111,20 @@ def _ogrenci_ad(db: Session, ogrenci_id: int) -> str:
 
 # --- talep açma ------------------------------------------------------------
 
+SAYILMAYAN = (REDDEDILDI, IPTAL, ZAMAN_ASIMI, KULLANILMADI)
+
+
+def evci_sayisi(db: Session, ogrenci_id: int, yil: int, ay: int) -> int:
+    return db.scalar(
+        select(func.count(IzinTalebi.id)).where(
+            IzinTalebi.ogrenci_id == ogrenci_id,
+            IzinTalebi.tur == "evci",
+            IzinTalebi.durum.not_in(SAYILMAYAN),
+            extract("year", IzinTalebi.cikis_zamani) == yil,
+            extract("month", IzinTalebi.cikis_zamani) == ay,
+        )) or 0
+
+
 def talep_ac(db: Session, kullanici: Kullanici, *, ogrenci_id: int, tur: str,
              cikis: datetime, donus: datetime, yer: str, gerekce: str,
              now: datetime) -> IzinTalebi:
@@ -138,6 +153,18 @@ def talep_ac(db: Session, kullanici: Kullanici, *, ogrenci_id: int, tur: str,
         durum = ONAYLANDI
     else:
         raise Yasak()
+
+    if tur == "evci" and kullanici.rol != "yonetici":
+        ayar = ayarlar.hepsi(db)
+        ihlal = ayarlar.evci_kuralini_denetle(ayar, cikis, donus)
+        if ihlal:
+            raise IsKuraliHatasi(ihlal, 422)
+        hak = ayar["aylik_evci_hakki"]
+        if hak:
+            kullanilan = evci_sayisi(db, ogrenci_id, cikis.year, cikis.month)
+            if kullanilan >= hak:
+                raise IsKuraliHatasi(
+                    f"Bu ay için evci hakkı doldu ({kullanilan}/{hak})", 422)
 
     cakisan = db.scalars(
         select(IzinTalebi).where(
@@ -255,27 +282,40 @@ def iptal(db: Session, kullanici: Kullanici, talep: IzinTalebi, *, now: datetime
 
 # --- çıkış / giriş ---------------------------------------------------------
 
-def okut(db: Session, kullanici: Kullanici, qr_token: str, *, now: datetime) -> dict:
+def okut(db: Session, kullanici: Kullanici, qr_token: str | None = None, *,
+         okul_no: str | None = None, now: datetime) -> dict:
     if kullanici.rol not in ("belletmen", "yonetici"):
         raise Yasak()
-    ogrenci = db.scalars(select(Ogrenci).where(Ogrenci.qr_token == qr_token)).first()
+    if qr_token:
+        ogrenci = db.scalars(select(Ogrenci).where(Ogrenci.qr_token == qr_token)).first()
+    elif okul_no:
+        ogrenci = db.scalars(select(Ogrenci).where(Ogrenci.okul_no == okul_no.strip())).first()
+    else:
+        raise IsKuraliHatasi("QR kodu veya okul numarası gerekli", 422)
     if ogrenci is None:
-        raise Bulunamadi("Geçersiz QR kodu")
+        raise Bulunamadi("Öğrenci bulunamadı (geçersiz QR veya numara)")
 
+    son = db.scalars(
+        select(Hareket).join(IzinTalebi, IzinTalebi.id == Hareket.talep_id)
+        .where(IzinTalebi.ogrenci_id == ogrenci.id).order_by(Hareket.id.desc())).first()
+    if son is not None and timedelta(0) <= now - son.zaman < timedelta(seconds=CIFTE_OKUTMA_SN):
+        raise IsKuraliHatasi(f"{ogrenci.ad_soyad}: az önce işlem yapıldı, tekrar okutulmadı")
+
+    tolerans = timedelta(minutes=ayarlar.al(db, "tolerans_dakika"))
     disarida = db.scalars(
         select(IzinTalebi).where(IzinTalebi.ogrenci_id == ogrenci.id,
                                  IzinTalebi.durum.in_(DISARIDAKI))
     ).first()
     if disarida is not None:
-        gec = now > disarida.donus_zamani + timedelta(minutes=config.TOLERANS_DAKIKA)
+        gec = now > disarida.donus_zamani + tolerans
         disarida.durum = DONDU
         db.add(Hareket(talep_id=disarida.id, tip="giris", zaman=now,
                        belletmen_id=kullanici.id,
                        aciklama="geç dönüş" if gec else ""))
-        denetle(db, kullanici.id, "giris", f"talep:{disarida.id}", {"gec": gec}, now)
+        denetle(db, kullanici.id, "giris", f"talep:{disarida.id}",
+                {"gec": gec, "yontem": "qr" if qr_token else "numara"}, now)
         return {"tip": "giris", "gec": gec, "ogrenci": ogrenci.ad_soyad, "talep_id": disarida.id}
 
-    tolerans = timedelta(minutes=config.TOLERANS_DAKIKA)
     onayli = list(db.scalars(
         select(IzinTalebi).where(IzinTalebi.ogrenci_id == ogrenci.id,
                                  IzinTalebi.durum == ONAYLANDI)
@@ -285,7 +325,8 @@ def okut(db: Session, kullanici: Kullanici, qr_token: str, *, now: datetime) -> 
             talep.durum = DISARIDA
             db.add(Hareket(talep_id=talep.id, tip="cikis", zaman=now,
                            belletmen_id=kullanici.id))
-            denetle(db, kullanici.id, "cikis", f"talep:{talep.id}", {}, now)
+            denetle(db, kullanici.id, "cikis", f"talep:{talep.id}",
+                    {"yontem": "qr" if qr_token else "numara"}, now)
             return {"tip": "cikis", "gec": False, "ogrenci": ogrenci.ad_soyad,
                     "talep_id": talep.id}
 
@@ -299,7 +340,8 @@ def tara(db: Session, now: datetime) -> dict:
     """Süre aşımlarını işaretler: geç kalanlar, yanıtsız veli onayları, kullanılmayan izinler."""
     sonuc = {"gecikti": 0, "zaman_asimi": 0, "kullanilmadi": 0}
 
-    sinir = now - timedelta(minutes=config.TOLERANS_DAKIKA)
+    ayar = ayarlar.hepsi(db)
+    sinir = now - timedelta(minutes=ayar["tolerans_dakika"])
     for talep in db.scalars(select(IzinTalebi).where(
             IzinTalebi.durum == DISARIDA, IzinTalebi.donus_zamani < sinir)):
         talep.durum = GECIKTI
@@ -309,7 +351,7 @@ def tara(db: Session, now: datetime) -> dict:
         denetle(db, None, "gecikti", f"talep:{talep.id}", {}, now)
         sonuc["gecikti"] += 1
 
-    veli_siniri = now - timedelta(hours=config.VELI_ZAMAN_ASIMI_SAAT)
+    veli_siniri = now - timedelta(hours=ayar["veli_zaman_asimi_saat"])
     for talep in db.scalars(select(IzinTalebi).where(
             IzinTalebi.durum == VELI_BEKLIYOR, IzinTalebi.olusturma_zamani < veli_siniri)):
         talep.durum = ZAMAN_ASIMI

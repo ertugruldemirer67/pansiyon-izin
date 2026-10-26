@@ -105,3 +105,10 @@ class Denetim(Base):
     nesne: Mapped[str] = mapped_column(String(64), default="")
     detay: Mapped[str] = mapped_column(Text, default="")
     zaman: Mapped[datetime]
+
+
+class Ayar(Base):
+    __tablename__ = "ayar"
+
+    anahtar: Mapped[str] = mapped_column(String(64), primary_key=True)
+    deger: Mapped[str] = mapped_column(Text)  # JSON
