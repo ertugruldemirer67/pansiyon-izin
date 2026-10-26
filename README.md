@@ -12,6 +12,9 @@ Aynı adres hem **sade web sitesi** (kurulum gerektirmez) hem **telefona ekleneb
 
 Tasarım: [docs/TASARIM.md](docs/TASARIM.md)
 
+## Yayına alma
+Ücretsiz bulutta (Neon + Render) telefondan kurulum: [docs/KURULUM.md](docs/KURULUM.md)
+
 ## Çalıştırma
 
 ```bash
@@ -20,7 +23,7 @@ pip install -r requirements.txt
 
 export SECRET_KEY="uzun-rastgele-bir-deger"   # üretimde zorunlu
 export COOKIE_SECURE=1                         # HTTPS arkasında zorunlu
-export DATABASE_URL="sqlite:///./pansiyon.db"  # PostgreSQL: postgresql+psycopg://...
+export DATABASE_URL="sqlite:///./pansiyon.db"  # PostgreSQL: postgresql://... (otomatik düzeltilir)
 
 # ilk yönetici hesabı
 python -m app.cli kullanici-ekle --kullanici-adi admin --ad-soyad "Sistem Yöneticisi" --rol sistem_yoneticisi
@@ -54,5 +57,7 @@ python -m pytest
 | `OTURUM_SAAT` | 12 | Oturum süresi |
 | `COOKIE_SECURE` | 0 | HTTPS arkasında 1 yapın |
 | `SAAT_DILIMI` | Europe/Istanbul | Sunucunun "şimdi" saati |
+| `ILK_YONETICI_ADI` / `ILK_YONETICI_SIFRE` | yok | Kabuk erişimi olmayan ortamda ilk sistem yöneticisini açar (yalnızca hiç yoksa) |
+| `TEST_DATABASE_URL` | yok | Verilirse testler bu PostgreSQL'e karşı koşar (tabloları siler!) |
 
 `TOLERANS_DAKIKA` ve `VELI_ZAMAN_ASIMI_SAAT` yalnızca ilk varsayılandır; panelden değiştirilen değer önceliklidir.

@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 import pytest
@@ -29,6 +30,14 @@ def saat(monkeypatch):
 
 @pytest.fixture
 def uygulama(tmp_path, saat):
+    url = os.environ.get("TEST_DATABASE_URL")  # verilirse testler PostgreSQL'e karşı koşar
+    if url:
+        from app.db import motor_olustur
+        from app.models import Base
+        motor = motor_olustur(url)
+        Base.metadata.drop_all(motor)
+        motor.dispose()
+        return create_app(url)
     return create_app(f"sqlite:///{tmp_path / 'test.db'}")
 
 

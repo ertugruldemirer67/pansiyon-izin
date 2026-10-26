@@ -1,0 +1,25 @@
+# Render "Blueprint": depoyu Render'a bağlayınca bu dosyadan kurulum yapılır.
+services:
+  - type: web
+    name: pansiyon-izin
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn --factory app.main:create_app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /saglik
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: SECRET_KEY
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: SAAT_DILIMI
+        value: Europe/Istanbul
+      - key: DATABASE_URL        # Neon bağlantı adresi (kurulum sırasında sorulur)
+        sync: false
+      - key: ILK_YONETICI_ADI    # ilk sistem yöneticisi kullanıcı adı, ör: admin
+        sync: false
+      - key: ILK_YONETICI_SIFRE  # en az 8 karakter; hesap açılınca silin
+        sync: false

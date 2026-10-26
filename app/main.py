@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import os
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
@@ -110,6 +111,26 @@ def talep_dict(db: Session, t: IzinTalebi) -> dict:
     }
 
 
+def ilk_yonetici_olustur(fabrika) -> None:
+    """Kabuk erişimi olmayan ortamlar için: ortam değişkenlerinden ilk sistem yöneticisini açar.
+
+    Yalnızca hiç sistem yöneticisi yokken çalışır. Hesap oluştuktan sonra
+    ILK_YONETICI_SIFRE değişkenini silmeniz önerilir."""
+    ad, sifre = os.environ.get("ILK_YONETICI_ADI"), os.environ.get("ILK_YONETICI_SIFRE")
+    if not ad or not sifre:
+        return
+    if len(sifre) < 8:
+        raise RuntimeError("ILK_YONETICI_SIFRE en az 8 karakter olmalı")
+    with fabrika() as db:
+        if db.scalars(select(Kullanici).where(Kullanici.rol == "sistem_yoneticisi")).first():
+            return
+        if db.scalars(select(Kullanici).where(Kullanici.kullanici_adi == ad)).first():
+            return
+        db.add(Kullanici(kullanici_adi=ad, ad_soyad="Sistem Yöneticisi", rol="sistem_yoneticisi",
+                         sifre_hash=sifre_hashle(sifre)))
+        db.commit()
+
+
 def create_app(database_url: str | None = None) -> FastAPI:
     app = FastAPI(title="Pansiyon İzin Sistemi")
     engine = motor_olustur(database_url)
@@ -117,6 +138,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app.state.motor = engine
     app.state.oturum_fabrikasi = oturum_fabrikasi(engine)
     app.state.giris_siniri = DenemeSiniri()
+    ilk_yonetici_olustur(app.state.oturum_fabrikasi)
 
     @app.exception_handler(workflow.IsKuraliHatasi)
     async def is_kurali_hatasi(_: Request, e: workflow.IsKuraliHatasi):

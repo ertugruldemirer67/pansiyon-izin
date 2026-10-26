@@ -85,3 +85,32 @@ def test_excel_ice_aktar_ve_ilk_kayit(uygulama, veri):
 def test_ice_aktar_yetkisi(istemci, veri):
     r = istemci("yonetici1").post("/admin/ice-aktar", files={"dosya": ("x.xlsx", excel([]))})
     assert r.status_code == 403
+
+
+def test_ilk_yonetici_ortam_degiskeninden(tmp_path, monkeypatch, saat):
+    from app.main import create_app
+    monkeypatch.setenv("ILK_YONETICI_ADI", "kurucu")
+    monkeypatch.setenv("ILK_YONETICI_SIFRE", "kurucu-sifre-1")
+    url = f"sqlite:///{tmp_path / 'ilk.db'}"
+    c = TestClient(create_app(url))
+    assert c.post("/auth/giris", json={"kullanici_adi": "kurucu", "sifre": "kurucu-sifre-1"}).status_code == 200
+    assert c.get("/ben").json()["rol"] == "sistem_yoneticisi"
+    # ikinci başlatma yinelenmiş hesap üretmez, hata vermez
+    c2 = TestClient(create_app(url))
+    assert c2.post("/auth/giris", json={"kullanici_adi": "kurucu", "sifre": "kurucu-sifre-1"}).status_code == 200
+
+
+def test_ilk_yonetici_kisa_sifre_reddedilir(tmp_path, monkeypatch, saat):
+    import pytest
+    from app.main import create_app
+    monkeypatch.setenv("ILK_YONETICI_ADI", "kurucu")
+    monkeypatch.setenv("ILK_YONETICI_SIFRE", "kisa")
+    with pytest.raises(RuntimeError):
+        create_app(f"sqlite:///{tmp_path / 'k.db'}")
+
+
+def test_postgres_url_duzeltme():
+    from app.db import url_duzelt
+    assert url_duzelt("postgres://u:p@h/db") == "postgresql+psycopg://u:p@h/db"
+    assert url_duzelt("postgresql://u:p@h/db?sslmode=require") == "postgresql+psycopg://u:p@h/db?sslmode=require"
+    assert url_duzelt("sqlite:///x.db") == "sqlite:///x.db"
